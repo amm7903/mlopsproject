@@ -1,23 +1,23 @@
 name: deploy-model-training-pipeline
-
-on: 
+on:
   workflow_dispatch:
 jobs:
   get-config:
-      uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
-      with:
-        file_name: config-infra-prod.yml
+    uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
+    with:
+      file_name: config-infra-prod.yml
+
   register-environment:
-      needs: get-config
-      uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
-      with:
-        resource_group: ${{ needs.get-config.outputs.resource_group }}
-        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
-        environment_file:  mlops/azureml/train/train-env.yml
-        conda_file: data-science/environment/train-conda.yml
-      secrets:
-          creds: ${{secrets.AZURE_CREDENTIALS}}
-          
+    needs: get-config
+    uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
+    with:
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+      environment_file: mlops/azureml/train/train-env.yml
+      conda_file: data-science/environment/train-conda.yml
+    secrets:
+      creds: ${{ secrets.AZURE_CREDENTIALS }}
+
   register-dataset:
     needs: get-config
     uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
@@ -27,30 +27,18 @@ jobs:
       name: taxi-data
       data_file: mlops/azureml/train/data.yml
     secrets:
-      creds: ${{secrets.AZURE_CREDENTIALS}}
-      
-  create-compute:
-      needs: [get-config,register-environment,register-dataset]
-      uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
-      with:
-        cluster_name: cpu-cluster
-        size: Standard_DS3_v2
-        min_instances: 0
-        max_instances: 4
-        cluster_tier: low_priority
-        resource_group: ${{ needs.get-config.outputs.resource_group }}
-        workspace_name: ${{ needs.get-config.outputs.aml_workspace }}     
-      secrets:
-          creds: ${{secrets.AZURE_CREDENTIALS}}
-ml_client = MLClient(
-    DefaultAzureCredential(),
-    subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
-    resource_group_name="resource_group_machine_learning",
-    workspace_name="FitWellWorkspace"
-)
+      creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-# Clone and resubmit the successful pipeline
- pipeline_job = ml_client.jobs.create_or_update(
-    ml_client.jobs.get("silly_net_n2jyz36q0d"),
-    experiment_name="random_forest_training_pipeline"
-)
+  create-compute:
+    needs: [get-config, register-environment, register-dataset]
+    uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
+    with:
+      cluster_name: cpu-cluster
+      size: Standard_DS3_v2
+      min_instances: 0
+      max_instances: 4
+      cluster_tier: low_priority
+      resource_group: ${{ needs.get-config.outputs.resource_group }}
+      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
+    secrets:
+      creds: ${{ secrets.AZURE_CREDENTIALS }}
