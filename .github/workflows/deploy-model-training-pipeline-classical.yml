@@ -5,6 +5,9 @@ jobs:
   provision-and-run:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Azure Login
         uses: azure/login@v1
         with:
