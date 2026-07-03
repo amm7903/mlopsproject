@@ -1,44 +1,87 @@
-name: deploy-model-training-pipeline
-on:
-  workflow_dispatch:
-jobs:
-  get-config:
-    uses: Azure/mlops-templates/.github/workflows/read-yaml.yml@main
+  - name: Azure Login
+    uses: azure/login@v1
     with:
-      file_name: config-infra-prod.yml
+      creds: ${{secrets.AZURE_CREDENTIALS}}
 
-  register-environment:
-    needs: get-config
-    uses: Azure/mlops-templates/.github/workflows/register-environment.yml@main
+  - name: Setup Python
+    uses: actions/setup-python@v4
     with:
-      resource_group: ${{ needs.get-config.outputs.resource_group }}
-      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-      environment_file: mlops/azureml/train/train-env.yml
-      conda_file: data-science/environment/train-conda.yml
-    secrets:
-      creds: ${{ secrets.AZURE_CREDENTIALS }}
+      python-version: '3.8'
 
-  register-dataset:
-    needs: get-config
-    uses: Azure/mlops-templates/.github/workflows/register-dataset.yml@main
-    with:
-      resource_group: ${{ needs.get-config.outputs.resource_group }}
-      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-      name: taxi-data
-      data_file: mlops/azureml/train/data.yml
-    secrets:
-      creds: ${{ secrets.AZURE_CREDENTIALS }}
+  - name: Install dependencies
+    run: |
+      pip install azure-ai-ml azure-identity
 
-  create-compute:
-    needs: [get-config, register-environment, register-dataset]
-    uses: Azure/mlops-templates/.github/workflows/create-compute.yml@main
-    with:
-      cluster_name: cpu-cluster
-      size: Standard_DS3_v2
-      min_instances: 0
-      max_instances: 4
-      cluster_tier: low_priority
-      resource_group: ${{ needs.get-config.outputs.resource_group }}
-      workspace_name: ${{ needs.get-config.outputs.aml_workspace }}
-    secrets:
-      creds: ${{ secrets.AZURE_CREDENTIALS }}
+  - name: Create Compute Cluster
+    run: |
+      python - <<EOF
+      from azure.ai.ml import MLClient
+      from azure.ai.ml.entities import AmlCompute
+      from azure.identity import DefaultAzureCredential
+
+      ml_client = MLClient(
+          DefaultAzureCredential(),
+          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
+          resource_group_name="resource_group_machine_learning",
+          workspace_name="FitWellWorkspace"
+      )
+
+      try:
+          ml_client.compute.get("cpu-cluster")
+          print("Cluster already exists")
+      except:
+          compute = AmlCompute(
+              name="cpu-cluster",
+              size="Standard_DS11_v2",
+              min_instances=0,
+              max_instances=1,
+          )
+          ml_client.compute.begin_create_or_update(compute).result()
+          print("Cluster created")
+      EOF
+
+  - name: Register Dataset
+    run: |
+      python - <<EOF
+      from azure.ai.ml import MLClient
+      from azure.ai.ml.entities import Data
+      from azure.ai.ml.constants import AssetTypes
+      from azure.identity import DefaultAzureCredential
+
+      ml_client = MLClient(
+          DefaultAzureCredential(),
+          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
+          resource_group_name="resource_group_machine_learning",
+          workspace_name="FitWellWorkspace"
+      )
+
+      data_asset = Data(
+          path="./data/used_cars.csv",
+          type=AssetTypes.URI_FILE,
+          description="Dataset of used cars for price prediction",
+          name="used-cars-data"
+      )
+      ml_client.data.create_or_update(data_asset)
+      print("Dataset registered")
+      EOF
+
+  - name: Run Pipeline
+    run: |
+      python - <<EOF
+      from azure.ai.ml import MLClient
+      from azure.identity import DefaultAzureCredential
+
+      ml_client = MLClient(
+          DefaultAzureCredential(),
+          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
+          resource_group_name="resource_group_machine_learning",
+          workspace_name="FitWellWorkspace"
+      )
+
+      # Clone and resubmit the successful pipeline
+      pipeline_job = ml_client.jobs.create_or_update(
+          ml_client.jobs.get("silly_net_n2jyz36q0d"),
+          experiment_name="random_forest_training_pipeline"
+      )
+      print(f"Pipeline submitted: {pipeline_job.name}")
+      EOF
