@@ -1,87 +1,94 @@
-  - name: Azure Login
-    uses: azure/login@v1
-    with:
-      creds: ${{secrets.AZURE_CREDENTIALS}}
+name: deploy-model-training-pipeline-classical
+on:
+  workflow_dispatch:
+jobs:
+  provision-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-  - name: Setup Python
-    uses: actions/setup-python@v4
-    with:
-      python-version: '3.8'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
 
-  - name: Install dependencies
-    run: |
-      pip install azure-ai-ml azure-identity
+      - name: Install dependencies
+        run: |
+          pip install azure-ai-ml azure-identity
 
-  - name: Create Compute Cluster
-    run: |
-      python - <<EOF
-      from azure.ai.ml import MLClient
-      from azure.ai.ml.entities import AmlCompute
-      from azure.identity import DefaultAzureCredential
+      - name: Create Compute Cluster
+        run: |
+          python - <<EOF
+          from azure.ai.ml import MLClient
+          from azure.ai.ml.entities import AmlCompute
+          from azure.identity import DefaultAzureCredential
 
-      ml_client = MLClient(
-          DefaultAzureCredential(),
-          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
-          resource_group_name="resource_group_machine_learning",
-          workspace_name="FitWellWorkspace"
-      )
-
-      try:
-          ml_client.compute.get("cpu-cluster")
-          print("Cluster already exists")
-      except:
-          compute = AmlCompute(
-              name="cpu-cluster",
-              size="Standard_DS11_v2",
-              min_instances=0,
-              max_instances=1,
+          ml_client = MLClient(
+              DefaultAzureCredential(),
+              subscription_id="${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              resource_group_name="resource_group_machine_learning",
+              workspace_name="FitWellWorkspace"
           )
-          ml_client.compute.begin_create_or_update(compute).result()
-          print("Cluster created")
-      EOF
 
-  - name: Register Dataset
-    run: |
-      python - <<EOF
-      from azure.ai.ml import MLClient
-      from azure.ai.ml.entities import Data
-      from azure.ai.ml.constants import AssetTypes
-      from azure.identity import DefaultAzureCredential
+          try:
+              ml_client.compute.get("cpu-cluster")
+              print("Cluster already exists")
+          except:
+              compute = AmlCompute(
+                  name="cpu-cluster",
+                  size="Standard_DS11_v2",
+                  min_instances=0,
+                  max_instances=1,
+              )
+              ml_client.compute.begin_create_or_update(compute).result()
+              print("Cluster created")
+          EOF
 
-      ml_client = MLClient(
-          DefaultAzureCredential(),
-          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
-          resource_group_name="resource_group_machine_learning",
-          workspace_name="FitWellWorkspace"
-      )
+      - name: Register Dataset
+        run: |
+          python - <<EOF
+          from azure.ai.ml import MLClient
+          from azure.ai.ml.entities import Data
+          from azure.ai.ml.constants import AssetTypes
+          from azure.identity import DefaultAzureCredential
 
-      data_asset = Data(
-          path="./data/used_cars.csv",
-          type=AssetTypes.URI_FILE,
-          description="Dataset of used cars for price prediction",
-          name="used-cars-data"
-      )
-      ml_client.data.create_or_update(data_asset)
-      print("Dataset registered")
-      EOF
+          ml_client = MLClient(
+              DefaultAzureCredential(),
+              subscription_id="${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              resource_group_name="resource_group_machine_learning",
+              workspace_name="FitWellWorkspace"
+          )
 
-  - name: Run Pipeline
-    run: |
-      python - <<EOF
-      from azure.ai.ml import MLClient
-      from azure.identity import DefaultAzureCredential
+          data_asset = Data(
+              path="./data/used_cars.csv",
+              type=AssetTypes.URI_FILE,
+              description="Dataset of used cars for price prediction",
+              name="used-cars-data"
+          )
+          ml_client.data.create_or_update(data_asset)
+          print("Dataset registered")
+          EOF
 
-      ml_client = MLClient(
-          DefaultAzureCredential(),
-          subscription_id="${{secrets.AZURE_SUBSCRIPTION_ID}}",
-          resource_group_name="resource_group_machine_learning",
-          workspace_name="FitWellWorkspace"
-      )
+      - name: Run Pipeline
+        run: |
+          python - <<EOF
+          from azure.ai.ml import MLClient
+          from azure.identity import DefaultAzureCredential
 
-      # Clone and resubmit the successful pipeline
-      pipeline_job = ml_client.jobs.create_or_update(
-          ml_client.jobs.get("silly_net_n2jyz36q0d"),
-          experiment_name="random_forest_training_pipeline"
-      )
-      print(f"Pipeline submitted: {pipeline_job.name}")
-      EOF
+          ml_client = MLClient(
+              DefaultAzureCredential(),
+              subscription_id="${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              resource_group_name="resource_group_machine_learning",
+              workspace_name="FitWellWorkspace"
+          )
+
+          # Clone and resubmit the successful pipeline
+          pipeline_job = ml_client.jobs.create_or_update(
+              ml_client.jobs.get("silly_net_n2jyz36q0d"),
+              experiment_name="random_forest_training_pipeline"
+          )
+          print(f"Pipeline submitted: {pipeline_job.name}")
+          EOF
